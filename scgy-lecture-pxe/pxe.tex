@@ -7,7 +7,7 @@
 \usepackage{ctex}
 
 \author{Jauntyliu @ SCGY-Tech}
-\title{Lessons on Linux, Server and Git}
+\title{SCGY Network and PXE}
 %\setbeamercovered{transparent} 
 %\setbeamertemplate{navigation symbols}{} 
 %\logo{} 
@@ -128,6 +128,14 @@ The Internet Protocol is designed for use in interconnected systems of packet-sw
 节选自RFC 791，上面部分描述了IP协议的设计动机——为了包转发系统的互联，包的路由和不同系统允许最大帧长度不同的处理。
 \end{frame}
 
+\begin{frame}
+\frametitle{Routers and the IP Protocol}
+\begin{figure}
+\includegraphics[width=0.7\textwidth]{encapsule.png}
+\caption{协议之间的封装关系}
+\end{figure}
+\end{frame}
+
 \begin{frame}[fragile]
 \frametitle{Routers and the IP Protocol}
 \fontsize{9pt}{9pt}
@@ -170,66 +178,71 @@ The Internet Protocol is designed for use in interconnected systems of packet-sw
 
 \begin{frame}
 \frametitle{Routers and the IP Protocol}
-\textbf{路由（Routing）}，即为每个IP数据包寻找道路。
+\textbf{路由（Routing）}，即为每个IP数据包寻找道路。典型的可以处理路由的设备是\textbf{路由器（Router）}和配有多网卡的计算机。
+\begin{itemize}
+\item 路由器自己拥有数个IP地址（一般每个端口一个IP地址）
+\item 对于发送到路由器的数据包，路由器会查找其维护的\textbf{路由表}，根据路由表来决定将把数据包发送到哪个IP地址\footnote{你可能会疑问，此时的MAC地址应该如何设置？}（即\textbf{下一跳（next hop）}）
+\item 两个IP地址分属同一\textbf{子网（subnet）}，指的是两个IP与子网掩码进行AND操作后的结果相同
+\item 如果自己的IP地址和数据包目标IP在同一子网下，那么路由器就会直接转发到自己的IP绑定的那个端口上
+\end{itemize}
+\end{frame}
+
+
+\begin{frame}
+\frametitle{Routers and the IP Protocol}
+那么，我们如何得到IP地址和MAC地址的关系？假设我们要发送一个IP数据包到地址$a$：
 \begin{enumerate}
-\item mkdir ~/XcxSaikou
-\item cp /etc/apt/source.list ~/XcxSaikou
-\item cd ~/XcxSaikou
-\item ls -l
+\item 对于不在同一子网的目标地址，计算机将发送\textbf{指在MAC帧中填入默认网关的MAC地址，详见第二条}到其配置的\textbf{默认网关\footnote{一般来说，默认网关应该和本机IP位于同一子网}（Default Gateway）}$b$
+\item 对于同一子网的目标地址，计算机将查询其\textbf{IP地址-MAC地址对应表（ARP表）}，如果表中没有，则通过ARP协议发送广播帧寻找目标主机的MAC地址
+\item 如果寻找到对应MAC地址，则将数据包底层的MAC帧填入对应MAC地址，发送出去；如果没有找到，则发送ICMP包“Destination Not Reachable”到源IP地址
+\end{enumerate}
+请注意，以上所有的“发送IP包”操作，均为递归过程（233）
+\end{frame}
+
+\begin{frame}
+\frametitle{How we configure routers}
+小练习：
+\begin{enumerate}
+\item 查看本机的IP地址，子网掩码和默认网关；看看你们是不是在一个子网里面
+\item 查看本机的ARP表和路由表
+\item 查看H3C Magic R2+的管理界面
 \end{enumerate}
 \end{frame}
 
-
 \begin{frame}
-\frametitle{What's under \textbf{/}?}
-Mission 2: Find what's under "\textbf{/}"?
-\end{frame}
-
-\begin{frame}
-\frametitle{What's under \textbf{/}?}
+\frametitle{TCP Protocol}
+\textbf{TCP，Transmission Control Protocol}：提供基于流的网络数据传输
 \begin{itemize}
-\item \textbf{/home} - User home directories\\
-In Unix, the directory \textbf{/home/your\_account} is the most decent place for you to store your personal data.
-\item \textbf{/usr} - Executables, libraries, and shared resources that are not system critical
-\item \textbf{/etc} - System-wide configuration files and system databases
-\item \textbf{/dev} - Devices, such as hard disks, ttys and displays.
-\item \textbf{/var} - Log files, print jobs, mails and temporaries
-\item \textbf{/lib} - Shared libraries, kernel module or device drivers.
-\item \textbf{/bin} - Binaries that should be available even when \textbf{/usr} haven't been mounted
-\item $\cdots$
+\item 连接是流式的，这意味着我们不用关心哪个数据包先到，哪个数据包后到；从网络获得数据就像从文件读取数据一样自然
+\item 支持对错误/丢失的部分重新传输，不需要应用层关心
+\item 提供65535个端口号\footnote{请注意，端口号是这里引入的}，用来区分不同的连接
 \end{itemize}
+正因为如此，HTTP、FTP等多基于TCP构建。
 \end{frame}
 
 \begin{frame}
-\frametitle{Basic File Editing}
+\frametitle{DHCP Protocol}
+传统上，我们可以手工配置IP地址，但是效率很低；两台同一局域网的机器使用了相同IP地址，则无法通信。使用\textbf{DHCP（Dynamic Host Configuration Protocol）}：
 \begin{itemize}
-\item User-friendly: \textbf{nano a.txt}
-\item Experienced: \textbf{vim a.txt}
-\item Obsolete: \textbf{ed a.txt}
+\item 在每台机器（“\textbf{DHCP客户机}”）发出DHCP请求时，DHCP服务器提供一个IP地址、子网掩码和默认网关
+\item 在Windows中，使用“自动获得IP地址”来使用DHCP
+\item 常用的DHCP服务器软件：ISC dhcpd，dnsmasq
 \end{itemize}
-Mission 3: Create a text file called "\textbf{Comments\_On\_Fruits.txt}" and write some words in it. You may use any of them if you like.
+
 \end{frame}
 
 \begin{frame}
-\frametitle{Users and Permissions}
-Users are entities who operate on this system.
-\begin{itemize}
-\item Every file and folder has an owner
-\item Users can only Read/Write/eXecute when they have the permission
-\item Use \textbf{ls -l} to see the permissions:\\
-\end{itemize}
-\begin{tabular}{llllll}
--rw-r--r-- & 1 & libreliu & sudo  &        38 Oct 15 23:29 & flag.txt\\
-drwxr-xr-x &  5  & libreliu & sudo &       4096 Oct 18 20:37 & writeup\\
-\end{tabular}
+\frametitle{Network Simulator}
+用Cisco Packet Tracer来模拟网络配置。
 
+问题：观察Hub、Switch、Router和DHCP、IP数据包的行为
 
 \end{frame}
 
 
 \begin{frame}
-\frametitle{SSH Operations}
-SSH stands for \textit{Secure Shell}, a software suite and a protocol designed for delivering remote shell, file copying and port-forwarding.
+\frametitle{PXE Stack}
+
 \begin{itemize}
 \item \textbf{ssh tempuser@192.168.4.233} - initiate a connection to remote machine, with username tempuser.\\
 When username was not specified, the ssh client will attempts to connect with local username that's using.
